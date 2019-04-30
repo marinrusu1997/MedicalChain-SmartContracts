@@ -309,7 +309,7 @@ void medical::addperm(const perm_info &perm, std::vector<uint8_t> &specialtyids,
    /* Specialties cardinality check */
    if ((rightid == right::WRITE || rightid == right::READ_WRITE) && (specialtyids.size() != 1))
    {
-      eosio_assert(false, "CONSULT or CONSULT&ADD rights can contain only 1 specialty");
+      eosio_assert(false, "ADD or CONSULT&ADD rights can contain only 1 specialty");
    }
    if ((rightid == right::READ) && (specialtyids.empty()))
    {
@@ -421,7 +421,7 @@ void medical::updtperm(const perm_info &perm, uint64_t permid, std::vector<uint8
    /* Specialties cardinality check */
    if ((rightid == right::WRITE || rightid == right::READ_WRITE) && (specialtyids.size() != 1))
    {
-      eosio_assert(false, "CONSULT or CONSULT&ADD rights can contain only 1 specialty");
+      eosio_assert(false, "ADD or CONSULT&ADD rights can contain only 1 specialty");
    }
    if ((rightid == right::READ) && (specialtyids.empty()))
    {
