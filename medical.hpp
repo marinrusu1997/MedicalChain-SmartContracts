@@ -125,6 +125,7 @@ public:
    struct record_info
    {
       std::string hash;
+      std::string description;
    };
 
    struct recordetails
@@ -132,6 +133,7 @@ public:
       uint32_t timestamp;
       std::string hash;
       eosio::name doctor;
+      std::string description;
 
       const auto to_json() const
       {
@@ -167,6 +169,7 @@ public:
 
    ACTION writerecord(const perm_info &perm, uint8_t specialtyid, record_info &recordinfo);
    ACTION readrecords(const perm_info &perm, const std::vector<uint8_t> &specialtyids, const interval &interval);
+   ACTION removerecord(eosio::name patient, uint8_t specialtyid, std::string hash);
 
    TABLE right
    {

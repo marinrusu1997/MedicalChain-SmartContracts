@@ -595,9 +595,12 @@ void medical::writerecord(const perm_info &perm, uint8_t specialtyid, record_inf
    records _records{get_self(), perm.patient.value};
    const auto &patient_records_iter = _records.find(perm.patient.value);
 
+   /* Check for description maxim length */
+   eosio_assert(recordinfo.description.length() <= 20, "description can contain up to 20 characters");
+
    /* Create patient records updater callback */
    const auto updater = [&](auto &record) {
-      record.details[specialtyid].push_back({now(), std::move(recordinfo.hash), perm.doctor});
+      record.details[specialtyid].push_back({now(), std::move(recordinfo.hash), perm.doctor, std::move(recordinfo.description)});
    };
 
    /* BTGM -> medical account can add records whether or not it has permissions */
@@ -710,6 +713,11 @@ void medical::readrecords(const perm_info &perm, const std::vector<uint8_t> &spe
    records _records{get_self(), perm.patient.value};
 
    /* BTGM -> medical contract doesn't need any permissions */
+   /* 
+      Account equality comparation is safe, due to fact that doctor and patients are registered on different tables
+      So doctor can't be patient and doctor on the same time
+      If the doctor will have the oportunity to be and patient on the same time, this equality won't work
+    */
    if (perm.doctor == get_self() || perm.doctor == perm.patient)
    {
       display_requested_record_hashes(specialtyids, interval, _records.find(perm.patient.value)->details);
@@ -771,6 +779,40 @@ void medical::readrecords(const perm_info &perm, const std::vector<uint8_t> &spe
    display_requested_record_hashes(specialtyids, interval, _records.find(perm.patient.value)->details);
 }
 
+void medical::removerecord(eosio::name patient, uint8_t specialtyid, std::string hash)
+{
+   /* Only contract is allowed to do this action */
+   require_auth(get_self());
+
+   /* Patient account validity check */
+   eosio_assert(is_account(patient), "this account doesn't exists");
+
+   /* Specialty id validity check */
+   const auto &speciality = _specialities_singleton.get(specialty::SINGLETON_ID, "Specilities nomenclature were not set yet");
+   eosio_assert(speciality.mapping.find(specialtyid) != speciality.mapping.end(), "speciality id is not valid");
+
+   /* Patient registration check */
+   records _records{get_self(), patient.value};
+   const auto &patient_records_iter = _records.find(patient.value);
+   eosio_assert(patient_records_iter != _records.end(), "this patient doesn't have any records");
+
+   /* Specialty records existence check */
+   const auto &specialty_records_iter = patient_records_iter->details.find(specialtyid);
+   eosio_assert(specialty_records_iter != patient_records_iter->details.end(), "this patient has no records for this specialty");
+
+   /* Record existence check */
+   const auto &records = specialty_records_iter->second;
+   const auto index = find(records, [&hash](const auto &record) {
+      return record.hash == hash;
+   });
+   eosio_assert(index != -1, "this record doesn't exist");
+
+   /* Remove record */
+   _records.modify(patient_records_iter, patient, [index, specialtyid](auto &record) {
+      remove(record.details[specialtyid], index);
+   });
+}
+
 bool medical::right::isRightInValidRange(uint8_t right) noexcept
 {
    switch (right)
@@ -785,4 +827,4 @@ bool medical::right::isRightInValidRange(uint8_t right) noexcept
    }
 }
 
-EOSIO_DISPATCH(medical, (loadrights)(begloaddspcs)(fnshloadspcs)(upsertpat)(rmpatient)(upsertdoc)(rmdoctor)(addperm)(updtperm)(rmperm)(readrecords)(writerecord))
+EOSIO_DISPATCH(medical, (loadrights)(begloaddspcs)(fnshloadspcs)(upsertpat)(rmpatient)(upsertdoc)(rmdoctor)(addperm)(updtperm)(rmperm)(readrecords)(writerecord)(removerecord))
