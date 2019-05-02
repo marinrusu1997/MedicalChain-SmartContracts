@@ -291,7 +291,7 @@ void medical::addperm(const perm_info &perm, std::vector<uint8_t> &specialtyids,
    /* Interval validity check */
    eosio_assert(interval.is_valid(), "specified interval is not valid");
 
-   /* Interval duration check check */
+   /* Interval duration check */
    const auto curr_time = now();
    const auto isUnlimitedInterval = interval.is_infinite();
    if (!isUnlimitedInterval)
@@ -335,6 +335,12 @@ void medical::addperm(const perm_info &perm, std::vector<uint8_t> &specialtyids,
    doctors _doctors{get_self(), perm.doctor.value};
    const auto doctor_iter = _doctors.find(perm.doctor.value);
    eosio_assert(doctor_iter != _doctors.end(), "this doctor wan't registered before");
+
+   /* Check medic specialty for WRITE and READ & WRITE rights */
+   if (rightid == right::WRITE || rightid == right::READ_WRITE)
+   {
+      eosio_assert(doctor_iter->specialtyid == specialtyids[0], "this doctor doesn't belongs to specified speciality");
+   }
 
    /* Permission overlapping check */
    permissions _permissions{get_self(), perm.patient.value};
@@ -464,6 +470,12 @@ void medical::updtperm(const perm_info &perm, uint64_t permid, std::vector<uint8
    permissions _permissions{get_self(), perm.patient.value};
    const auto permission_iter = _permissions.find(permid);
    eosio_assert(permission_iter != _permissions.end(), "this permission id is not valid");
+
+   /* Check medic specialty for WRITE and READ & WRITE rights */
+   if (rightid == right::WRITE || rightid == right::READ_WRITE)
+   {
+      eosio_assert(doctor_iter->specialtyid == specialtyids[0], "this doctor doesn't belongs to specified speciality");
+   }
 
    /* Permission overlapping check */
    for (const auto doctor_permid : doctor_assigned_perms)
@@ -737,7 +749,8 @@ void medical::readrecords(const perm_info &perm, const std::vector<uint8_t> &spe
    /* Check if has READ or READ & WRITE perm */
    permissions _permissions{get_self(), perm.patient.value};
 
-   auto number_of_specialties_unsatisfied = specialtyids.size();
+   auto number_of_specialties_satisfied = 0;
+   const auto number_of_specialties_requested = specialtyids.size();
    const auto &doctor_assigned_perms = doctor_assigned_perms_iter->second;
 
    std::map<uint8_t, bool> satisfied_specialties;
@@ -748,7 +761,7 @@ void medical::readrecords(const perm_info &perm, const std::vector<uint8_t> &spe
    {
       const auto &&perm_iter = _permissions.find(perm_id);
       /* If we found perms for all specialties stop */
-      if (number_of_specialties_unsatisfied == 0)
+      if (number_of_specialties_satisfied == number_of_specialties_requested)
          break;
       /* Check is this perm can satisfy unsatisfied specialties */
       if ((perm_iter->right == right::READ || perm_iter->right == right::READ_WRITE) &&           /* right check */
@@ -767,16 +780,26 @@ void medical::readrecords(const perm_info &perm, const std::vector<uint8_t> &spe
                if (found_iter != perm_iter->specialtyids.end())
                {
                   satisfied_specialties[specialty_id] = true;
-                  number_of_specialties_unsatisfied--;
+                  number_of_specialties_satisfied++;
                }
             }
          }
       }
    }
-   eosio_assert(number_of_specialties_unsatisfied == 0, "you don't have required permission to read records for all specialties");
+   eosio_assert(number_of_specialties_satisfied == 0, "you don't have required permission to read records for all specialties");
+
+   /* Collect satisfied specialties */
+   std::vector<uint8_t> satisfied_specialties_ids{};
+   for (const auto &[specialty_id, is_satisfied] : satisfied_specialties)
+   {
+      if (is_satisfied)
+      {
+         satisfied_specialties_ids.push_back(specialty_id);
+      }
+   }
 
    /* Display record hashes */
-   display_requested_record_hashes(specialtyids, interval, _records.find(perm.patient.value)->details);
+   display_requested_record_hashes(satisfied_specialties_ids, interval, _records.find(perm.patient.value)->details);
 }
 
 void medical::removerecord(eosio::name patient, uint8_t specialtyid, std::string hash)

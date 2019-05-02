@@ -146,6 +146,8 @@ public:
              .complete_value_adding()
              .add_key("doctor")
              .add_value(doctor.to_string())
+             .add_key("description")
+             .add_value(description)
              .build();
       }
 
