@@ -37,8 +37,17 @@ auto get_position_helper(const std::vector<T> &arr, const size_t lower, const si
       if (elem == arr[middle])
          return middle;
       if (elem < arr[middle])
-         return get_position_helper(arr, lower, middle - 1, elem);
-      return get_position_helper(arr, middle + 1, upper, elem);
+      {
+         /* Sign overflow check */
+         if (middle != 0)
+         {
+            return get_position_helper(arr, lower, middle - 1, elem);
+         }
+      }
+      else
+      {
+         return get_position_helper(arr, middle + 1, upper, elem);
+      }
    }
    return lower;
 }
@@ -786,7 +795,7 @@ void medical::readrecords(const perm_info &perm, const std::vector<uint8_t> &spe
          }
       }
    }
-   eosio_assert(number_of_specialties_satisfied == 0, "you don't have required permission to read records for all specialties");
+   eosio_assert(number_of_specialties_satisfied != 0, "you don't have required permission to read records for all specialties");
 
    /* Collect satisfied specialties */
    std::vector<uint8_t> satisfied_specialties_ids{};
