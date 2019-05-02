@@ -27,6 +27,14 @@ struct json_builder
       return *this;
    }
 
+    json_builder &add_string_value(const std::string_view value)
+   {
+      m_json += '"';
+      m_json += value;
+      m_json += '"';
+      return *this;
+   }
+
    json_builder &start_array()
    {
       m_json += '[';
@@ -142,12 +150,13 @@ public:
              .add_value(std::to_string(timestamp))
              .complete_value_adding()
              .add_key("hash")
-             .add_value(hash)
+             .add_string_value(hash)
              .complete_value_adding()
              .add_key("doctor")
-             .add_value(doctor.to_string())
+             .add_string_value(doctor.to_string())
+             .complete_value_adding()
              .add_key("description")
-             .add_value(description)
+             .add_string_value(description)
              .build();
       }
 
