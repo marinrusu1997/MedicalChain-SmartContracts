@@ -364,20 +364,24 @@ void medical::addperm(const perm_info &perm, std::vector<uint8_t> &specialtyids,
    }
 
    /* Granted record encription AES key from patient section*/
-   auto &doctor_granted_keys = doctor_iter->grantedkeys;
-   const auto &patient_granted_key_iter = doctor_granted_keys.find(perm.patient);
-   /* Is this first permission adding ? */
-   if (patient_granted_key_iter == doctor_granted_keys.end())
+   /* This key is needed only when adding a WRITE or READ & WRITE perm */
+   if (rightid == right::WRITE || rightid == right::READ_WRITE)
    {
-      /* Check for key validity */
-      if (decreckey.empty())
+      auto &doctor_granted_keys = doctor_iter->grantedkeys;
+      const auto &patient_granted_key_iter = doctor_granted_keys.find(perm.patient);
+      /* Is this first permission adding ? */
+      if (patient_granted_key_iter == doctor_granted_keys.end())
       {
-         eosio_assert(false, "when adding perm for first time, you must provide your record encription/decryption key");
+         /* Check for key validity */
+         if (decreckey.empty())
+         {
+            eosio_assert(false, "when adding ADD or CONSULT&ADD perm for first time, you must provide your record encription/decryption key");
+         }
+         /* Add key to granted set from patient to specified doctor */
+         _doctors.modify(doctor_iter, perm.patient, [&perm, &decreckey](auto &doctor) {
+            doctor.grantedkeys[perm.patient] = std::move(decreckey);
+         });
       }
-      /* Add key to granted set from patient to specified doctor */
-      _doctors.modify(doctor_iter, perm.patient, [&perm, &decreckey](auto &doctor) {
-         doctor.grantedkeys[perm.patient] = std::move(decreckey);
-      });
    }
 
    /* Permission emplacement */
@@ -811,6 +815,43 @@ void medical::readrecords(const perm_info &perm, const std::vector<uint8_t> &spe
    display_requested_record_hashes(satisfied_specialties_ids, interval, _records.find(perm.patient.value)->details);
 }
 
+std::string serialize_records_to_json(const std::map<uint8_t, std::vector<medical::recordetails>> &record_details,
+                                      const std::map<uint8_t, std::string> &specialities_mapping)
+{
+   json_builder j_builder;
+   for (const auto &[specialty_id, records] : record_details)
+   {
+      j_builder.add_key(specialities_mapping.find(specialty_id)->second).start_array();
+      for (const auto &record : records)
+      {
+         j_builder.add_value(record.to_json()).complete_value_adding();
+      }
+      j_builder.undo_complete_value_adding().end_array().complete_value_adding();
+   }
+   return j_builder.undo_complete_value_adding().build();
+}
+
+void medical::recordstab(const eosio::name patient)
+{
+   /* Signature check, only patient is able to see all of his records */
+   require_auth(patient);
+
+   /* 
+      Check if this account is registered as patient by loading his records table
+      This works because:
+         1) only patiens can have records
+         2) at registration for every patient is created a table entry scopped with his account name
+         3) doctors can't be registered as patient and doctor at the same time
+   */
+   records _records{get_self(), patient.value};
+   const auto &patient_records_iter = _records.find(patient.value);
+   eosio_assert(patient_records_iter != _records.end(), "you are not a registered patient");
+
+   /* Serialize and display all records */
+   eosio::print(serialize_records_to_json(patient_records_iter->details,
+                                          _specialities_singleton.get(specialty::SINGLETON_ID, "Specilities nomenclature were not set yet").mapping));
+}
+
 void medical::removerecord(eosio::name patient, uint8_t specialtyid, std::string hash)
 {
    /* Only contract is allowed to do this action */
@@ -859,4 +900,4 @@ bool medical::right::isRightInValidRange(uint8_t right) noexcept
    }
 }
 
-EOSIO_DISPATCH(medical, (loadrights)(begloaddspcs)(fnshloadspcs)(upsertpat)(rmpatient)(upsertdoc)(rmdoctor)(addperm)(updtperm)(rmperm)(readrecords)(writerecord)(removerecord))
+EOSIO_DISPATCH(medical, (loadrights)(begloaddspcs)(fnshloadspcs)(upsertpat)(rmpatient)(upsertdoc)(rmdoctor)(addperm)(updtperm)(rmperm)(readrecords)(writerecord)(removerecord)(recordstab))
