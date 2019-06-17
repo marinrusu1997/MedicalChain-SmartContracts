@@ -2,7 +2,6 @@
 #include <eosiolib/transaction.hpp>
 #include <algorithm>
 #include <set>
-#include <ctime>
 
 template <typename T>
 void remove(std::vector<T> &vec, size_t pos)
@@ -259,7 +258,7 @@ void medical::schedule_for_deletion(const perm_info &perm, uint64_t permid, uint
    t.send(permid, perm.patient);
 }
 
-bool medical::specialty::are_overlapped(const std::vector<uint8_t> &_specialtyids, const std::vector<uint8_t> &_otherspecialtyids)
+bool medical::specialty::are_overlapped(const std::vector<uint8_t> &_specialtyids, const std::vector<uint8_t> &_otherspecialtyids) noexcept
 {
    for (const auto &_firstspecid : _specialtyids)
       for (const auto &_secondspecid : _otherspecialtyids)
@@ -268,12 +267,12 @@ bool medical::specialty::are_overlapped(const std::vector<uint8_t> &_specialtyid
    return false;
 }
 
-bool medical::specialty::are_specialties_unique(const std::vector<uint8_t> &_specialtyids)
+bool medical::specialty::are_specialties_unique(const std::vector<uint8_t> &_specialtyids) noexcept
 {
    return std::set<uint8_t>{_specialtyids.begin(), _specialtyids.end()}.size() == _specialtyids.size();
 }
 
-bool medical::permission::are_overlapped(const std::vector<uint8_t> &__specialtyids, uint8_t __right, const medical::interval &__interval, const permission &__other_perm)
+bool medical::permission::are_overlapped(const std::vector<uint8_t> &__specialtyids, uint8_t __right, const medical::interval &__interval, const permission &__other_perm) noexcept
 {
    if (right::are_rights_overlapped(__right, __other_perm.right))
    {
@@ -302,8 +301,8 @@ void medical::addperm(const perm_info &perm, std::vector<uint8_t> &specialtyids,
 
    /* Interval duration check */
    const auto curr_time = now();
-   const auto isUnlimitedInterval = interval.is_infinite();
-   if (!isUnlimitedInterval)
+   const auto isLimitedInterval = interval.is_limited();
+   if (isLimitedInterval)
    {
       /* Check for write and read&write permissions to not start before current time */
       if (rightid == right::WRITE || rightid == right::READ_WRITE)
@@ -398,8 +397,8 @@ void medical::addperm(const perm_info &perm, std::vector<uint8_t> &specialtyids,
       patient.perms[perm.doctor].push_back(perm_id);
    });
 
-   /* Schedule for auto-deletion write and read & write permissions only if they are not unlimited */
-   if ((rightid == right::WRITE || rightid == right::READ_WRITE) && !isUnlimitedInterval)
+   /* Schedule for auto-deletion write permissions only if they are not unlimited */
+   if (rightid == right::WRITE && isLimitedInterval)
    {
       schedule_for_deletion(perm, perm_id, curr_time, interval.to);
    }
@@ -419,21 +418,17 @@ void medical::updtperm(const perm_info &perm, uint64_t permid, std::vector<uint8
    /* Interval validity check */
    eosio_assert(interval.is_valid(), "specified interval is not valid");
 
-   /* Interval duration check */
+ /* Interval duration check */
    const auto curr_time = now();
-   const auto isUnlimitedInterval = interval.is_infinite();
-   const auto isChangedBeforeTakingEffect = interval.from >= curr_time;
-   /* If interval is limited, then we must ensure that specified interval meets the imposed criterias */
-   if (!isUnlimitedInterval)
+   if (interval.is_limited())
    {
-      /* If permission taked effect alreay, then there is a chance that the new interval can start before current time */
-      /* This check must be done only for write and read & write perms, as they are auto-removable */
-      if (!isChangedBeforeTakingEffect && (rightid == right::WRITE || rightid == right::READ_WRITE))
+      /* Check for write and read&write permissions to not start before current time */
+      if (rightid == right::WRITE || rightid == right::READ_WRITE)
       {
-         const auto isUpperLimitGreaterEnoughThanCurrentTime = (interval.to - 10) > curr_time;
-         eosio_assert(isUpperLimitGreaterEnoughThanCurrentTime, "upper limit of interval can't be lower than current time");
+         const auto isGreatherOrEqThanCurrentTime = interval.from >= curr_time;
+         eosio_assert(isGreatherOrEqThanCurrentTime, "interval can't start before current time");
       }
-      /* All permissions must met minimum interval criterias */
+      /* Every permission must respect minimum interval */
       eosio_assert(interval.has_min_duration(), (std::string("min interval is ") + interval.MIN_INTERVAL_STR + " or infinite").c_str());
    }
 
@@ -504,10 +499,10 @@ void medical::updtperm(const perm_info &perm, uint64_t permid, std::vector<uint8
    */
    /*
       Following transitions may appear:
-         1) WRITE or READ & WRITE -> WRITE or READ & WRITE (reschedule, prev perm must be cancelled in order to not owerlap with current perm)
-         2) WRITE or READ & WRITE -> READ (prev perm must be cancelled in order to not owerlap with current perm)
-         3) READ -> WRITE or READ & WRITE (reschedule)
-         4) READ -> READ (do nothing)
+         1) WRITE -> WRITE (reschedule, prev perm must be cancelled in order to not owerlap with current perm)
+         2) WRITE -> READ or READ & WRITE (prev perm must be cancelled in order to not owerlap with current perm)
+         3) READ or READ & WRITE -> WRITE (reschedule)
+         4) READ or READ & WRITE -> READ (do nothing)
    */
    /*
       Rescheduling must be done transition target is WRITE or READ & WRITE, no matter what is the source
@@ -515,19 +510,19 @@ void medical::updtperm(const perm_info &perm, uint64_t permid, std::vector<uint8
    /*
       First, cancelling must be done, in order to rescheduling
       Cancelling must be done when the following criterias are met:
-         1) transition source is WRITE or READ & WRITE, no matter what is the target
+         1) transition source is WRITE, no matter what is the target
          2) initial interval was limited
    */
-   if ((permission_iter->right == right::WRITE || permission_iter->right == right::READ_WRITE) && !permission_iter->interval.is_infinite())
+   if (permission_iter->right == right::WRITE && permission_iter->interval.is_limited())
    {
       cancel_deferred(permid);
    }
    /*
       Second, rescheduling must be done, only if the following criterias are met:
-         1) transition target is WRITE or READ & WRITE, no matter what is the source
+         1) transition target is WRITE, no matter what is the source
          2) updated interval is limited
    */
-   if ((rightid == right::WRITE || rightid == right::READ_WRITE) && !interval.is_infinite())
+   if (rightid == right::WRITE && interval.is_limited())
    {
       schedule_for_deletion(perm, permid, curr_time, interval.to);
    }
@@ -570,10 +565,10 @@ void medical::rmperm(const perm_info &perm, uint64_t permid)
 
    /* 
       Auto-remove cancel check must met the folowing criterias:
-         1) permission type must be WRITE or READ & WRITE
+         1) permission type must be WRITE
          2) permission interval must be limited
    */
-   if ((permission_iter->right == right::WRITE || permission_iter->right == right::READ_WRITE) && !permission_iter->interval.is_infinite())
+   if (permission_iter->right == right::WRITE && permission_iter->interval.is_limited())
    {
       cancel_deferred(permission_iter->id);
    }
@@ -886,7 +881,7 @@ void medical::removerecord(eosio::name patient, uint8_t specialtyid, std::string
    });
 }
 
-bool medical::right::isRightInValidRange(uint8_t right) noexcept
+bool medical::right::isRightInValidRange(const uint8_t right) noexcept
 {
    switch (right)
    {

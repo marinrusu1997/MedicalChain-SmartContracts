@@ -27,7 +27,7 @@ struct json_builder
       return *this;
    }
 
-    json_builder &add_string_value(const std::string_view value)
+   json_builder &add_string_value(const std::string_view value)
    {
       m_json += '"';
       m_json += value;
@@ -89,27 +89,37 @@ public:
       static const inline int MIN_INTERVAL_SEC = 300;
       static const inline char *const MIN_INTERVAL_STR = "5 min";
 
-      bool inline is_infinite() const
+      bool inline is_infinite() const noexcept
       {
          return from == 0 && to == 0;
       }
 
-      static bool inline is_infinite(uint32_t from, uint32_t to)
+      static bool inline is_infinite(uint32_t from, uint32_t to) noexcept
       {
          return from == 0 && to == 0;
       }
 
-      bool inline is_valid() const
+      bool inline is_limited() const noexcept
+      {
+         return from != 0 && to != 0;
+      }
+
+      static bool inline is_limited(uint32_t from, uint32_t to) noexcept
+      {
+         return from != 0 && to != 0;
+      }
+
+      bool inline is_valid() const noexcept
       {
          return (from == 0 && to == 0) || (from != 0 && to != 0);
       }
 
-      static bool inline is_valid(uint32_t from, uint32_t to)
+      static bool inline is_valid(uint32_t from, uint32_t to) noexcept
       {
          return (from == 0 && to == 0) || (from != 0 && to != 0);
       }
 
-      bool inline is_overlapping_with(const interval &_other) const
+      bool inline is_overlapping_with(const interval &_other) const noexcept
       {
          if (this->is_infinite())
             return true;
@@ -118,7 +128,7 @@ public:
          return (this->from >= _other.to || this->to <= _other.from) ? false : true;
       }
 
-      bool inline has_min_duration() const
+      bool inline has_min_duration() const noexcept
       {
          return (from < to) && ((to - from) >= MIN_INTERVAL_SEC);
       }
@@ -160,8 +170,8 @@ public:
              .build();
       }
 
-      friend bool operator==(const uint32_t other_timestamp, const recordetails &record) { return other_timestamp == record.timestamp; }
-      friend bool operator<(const uint32_t other_timestamp, const recordetails &record) { return other_timestamp < record.timestamp; }
+      friend bool operator==(uint32_t other_timestamp, const recordetails &record) noexcept { return other_timestamp == record.timestamp; }
+      friend bool operator<(uint32_t other_timestamp, const recordetails &record) noexcept { return other_timestamp < record.timestamp; }
    };
 
    ACTION loadrights();
@@ -191,8 +201,8 @@ public:
          WRITE,
          READ_WRITE
       };
-      static inline bool isRightInValidRange(uint8_t right) noexcept;
-      static inline bool are_rights_overlapped(const uint8_t _first, const uint8_t _second)
+      static inline bool isRightInValidRange(const uint8_t right) noexcept;
+      static inline bool are_rights_overlapped(const uint8_t _first, const uint8_t _second) noexcept
       {
          return _first == _second || _first == right::READ_WRITE || _second == right::READ_WRITE;
       }
@@ -201,7 +211,7 @@ public:
       std::map<uint8_t, std::string> mapping;
       static constexpr inline uint64_t SINGLETON_ID = 0;
 
-      uint64_t primary_key() const { return id; }
+      uint64_t primary_key() const noexcept { return id; }
    };
    typedef eosio::multi_index<eosio::name{"rights"}, right> rights_table;
 
@@ -211,10 +221,10 @@ public:
       std::map<uint8_t, std::string> mapping;
       static constexpr inline uint64_t SINGLETON_ID = 0;
 
-      static inline bool are_overlapped(const std::vector<uint8_t> &_specialtyids, const std::vector<uint8_t> &_otherspecialtyids);
-      static inline bool are_specialties_unique(const std::vector<uint8_t> &_specialtyids);
+      static inline bool are_overlapped(const std::vector<uint8_t> &_specialtyids, const std::vector<uint8_t> &_otherspecialtyids) noexcept;
+      static inline bool are_specialties_unique(const std::vector<uint8_t> &_specialtyids) noexcept;
 
-      uint64_t primary_key() const { return id; }
+      uint64_t primary_key() const noexcept { return id; }
    };
    typedef eosio::multi_index<eosio::name{"specialities"}, specialty> specialties_table;
 
@@ -225,9 +235,9 @@ public:
       uint8_t right;
       interval interval;
 
-      static bool inline are_overlapped(const std::vector<uint8_t> &__specialtyids, uint8_t __right, const medical::interval &__interval, const permission &__other_perm);
+      static bool inline are_overlapped(const std::vector<uint8_t> &__specialtyids, uint8_t __right, const medical::interval &__interval, const permission &__other_perm) noexcept;
 
-      uint64_t primary_key() const { return id; }
+      uint64_t primary_key() const noexcept { return id; }
    };
    typedef eosio::multi_index<eosio::name{"permissions"}, permission> permissions;
 
@@ -240,7 +250,7 @@ public:
       /* Account -> permission id's */
       std::map<eosio::name, std::vector<uint64_t>> perms;
 
-      uint64_t primary_key() const { return account.value; }
+      uint64_t primary_key() const noexcept { return account.value; }
    };
    typedef eosio::multi_index<eosio::name{"patients"}, patient> patients;
 
@@ -258,7 +268,7 @@ public:
       /* specialty -> record details */
       std::map<uint8_t, std::vector<recordetails>> details;
 
-      uint64_t primary_key() const { return patient.value; }
+      uint64_t primary_key() const noexcept { return patient.value; }
    };
    typedef eosio::multi_index<eosio::name{"records"}, record> records;
 
@@ -273,7 +283,7 @@ public:
       /* Granted record encription/decription AES keys from patients */
       std::map<eosio::name, std::string> grantedkeys;
 
-      uint64_t primary_key() const { return account.value; }
+      uint64_t primary_key() const noexcept { return account.value; }
    };
    typedef eosio::multi_index<eosio::name{"doctors"}, doctor> doctors;
 
