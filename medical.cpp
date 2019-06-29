@@ -363,24 +363,21 @@ void medical::addperm(const perm_info &perm, std::vector<uint8_t> &specialtyids,
    }
 
    /* Granted record encription AES key from patient section*/
-   /* This key is needed only when adding a WRITE or READ & WRITE perm */
-   if (rightid == right::WRITE || rightid == right::READ_WRITE)
+   /* This key is needed only when adding first perm */
+   auto &doctor_granted_keys = doctor_iter->grantedkeys;
+   const auto &patient_granted_key_iter = doctor_granted_keys.find(perm.patient);
+   /* Is this first permission adding ? */
+   if (patient_granted_key_iter == doctor_granted_keys.end())
    {
-      auto &doctor_granted_keys = doctor_iter->grantedkeys;
-      const auto &patient_granted_key_iter = doctor_granted_keys.find(perm.patient);
-      /* Is this first permission adding ? */
-      if (patient_granted_key_iter == doctor_granted_keys.end())
+      /* Check for key validity */
+      if (decreckey.empty())
       {
-         /* Check for key validity */
-         if (decreckey.empty())
-         {
-            eosio_assert(false, "when adding ADD or CONSULT&ADD perm for first time, you must provide your record encription/decryption key");
-         }
-         /* Add key to granted set from patient to specified doctor */
-         _doctors.modify(doctor_iter, perm.patient, [&perm, &decreckey](auto &doctor) {
-            doctor.grantedkeys[perm.patient] = std::move(decreckey);
-         });
+         eosio_assert(false, "when adding perm for first time, you must provide your record encription/decryption key");
       }
+      /* Add key to granted set from patient to specified doctor */
+      _doctors.modify(doctor_iter, perm.patient, [&perm, &decreckey](auto &doctor) {
+         doctor.grantedkeys[perm.patient] = std::move(decreckey);
+      });
    }
 
    /* Permission emplacement */
@@ -418,7 +415,7 @@ void medical::updtperm(const perm_info &perm, uint64_t permid, std::vector<uint8
    /* Interval validity check */
    eosio_assert(interval.is_valid(), "specified interval is not valid");
 
- /* Interval duration check */
+   /* Interval duration check */
    const auto curr_time = now();
    if (interval.is_limited())
    {
